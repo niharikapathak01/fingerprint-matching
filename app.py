@@ -44,8 +44,6 @@ def load_database_images(db_folder):
     return img_files
 
 
-
-
 def estimate_pattern(img):
     """
     Roughly estimate global fingerprint pattern: Arch / Loop / Whorl.
@@ -75,8 +73,6 @@ def estimate_pattern(img):
         return "Whorl"
 
 
-
-
 def is_probably_fingerprint(img):
     """
     Rough heuristic to reject non-fingerprint images (faces, scenes, etc.)
@@ -87,17 +83,14 @@ def is_probably_fingerprint(img):
     except Exception:
         return False
 
-    
     roi = img[h // 4: 3 * h // 4, w // 4: 3 * w // 4]
     if roi.size == 0:
         return False
 
-    
     edges = cv2.Canny(roi, 50, 150)
     edge_pixels = np.sum(edges > 0)
     edge_density = edge_pixels / edges.size  # 0..1
 
-    
     gx = cv2.Sobel(roi, cv2.CV_32F, 1, 0, ksize=3)
     gy = cv2.Sobel(roi, cv2.CV_32F, 0, 1, ksize=3)
     mag, ang = cv2.cartToPolar(gx, gy, angleInDegrees=True)
@@ -108,15 +101,12 @@ def is_probably_fingerprint(img):
         orient_contrast = 0.0
     else:
         peak = hist.max()
-        orient_contrast = peak / total  
+        orient_contrast = peak / total
 
-    
     if 0.05 < edge_density < 0.45 and orient_contrast > 0.18:
         return True
     else:
         return False
-
-
 
 
 def compute_orb_features(img):
@@ -143,7 +133,7 @@ def match_fingerprints(query_img, db_img):
 
     good_matches = []
     for m, n in knn_matches:
-        
+        # Lowe's ratio test
         if m.distance < 0.75 * n.distance:
             good_matches.append(m)
 
@@ -166,17 +156,15 @@ def match_fingerprints(query_img, db_img):
     return score, rel_score, match_vis_rgb
 
 
-
-
 def extract_minutiae_like_points(img):
     """
     Simplified 'minutiae-style' points using corner detection on ridge edges.
     Educational approximation of ridge endings / bifurcations.
     """
-    
+    # Edge map (ridges boundaries)
     edges = cv2.Canny(img, 50, 150)
 
-    
+    # Corner detection on edges
     corners = cv2.goodFeaturesToTrack(
         edges,
         maxCorners=200,
@@ -225,7 +213,7 @@ def match_fingerprints_minutiae(query_img, db_img):
     max_pts = max(len(pts_q), len(pts_db))
     rel_score = matches / max_pts if max_pts > 0 else 0.0
 
-    
+
     h, w = query_img.shape
     h2, w2 = db_img.shape
     vis_h = max(h, h2)
@@ -235,18 +223,16 @@ def match_fingerprints_minutiae(query_img, db_img):
     vis[:h, :w, :] = cv2.cvtColor(query_img, cv2.COLOR_GRAY2BGR)
     vis[:h2, w + 10:w + 10 + w2, :] = cv2.cvtColor(db_img, cv2.COLOR_GRAY2BGR)
 
-   
+    # Query points (red)
     for (x, y) in pts_q:
         cv2.circle(vis, (x, y), 2, (0, 0, 255), -1)
 
-    
+    # DB points (green, shifted)
     for (x, y) in pts_db:
         cv2.circle(vis, (w + 10 + x, y), 2, (0, 255, 0), -1)
 
     vis_rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
     return matches, rel_score, vis_rgb
-
-
 
 
 def explain_match(score, rel_score, threshold_abs, threshold_rel,
@@ -255,7 +241,7 @@ def explain_match(score, rel_score, threshold_abs, threshold_rel,
     Build explanation text for: pattern + minutiae-style + ridge features.
     We treat ORB keypoints or corner points as approximated local fingerprint features.
     """
-    
+
     matched = (
         score >= threshold_abs and
         rel_score >= threshold_rel and
@@ -264,95 +250,91 @@ def explain_match(score, rel_score, threshold_abs, threshold_rel,
 
     if matched:
         pattern_line = (
-            f"**Global pattern (shape):** Query = `{pattern_q}`, Database = `{pattern_db}` → "
+            f"*Global pattern (shape):* Query = {pattern_q}, Database = {pattern_db} → "
             f"overall pattern is compatible / similar."
         )
         minutiae_line = (
-            "**Local features (minutiae-style points):** High number of good matches and strong "
+            "*Local features (minutiae-style points):* High number of good matches and strong "
             "relative match ratio indicate that distinctive ridge points align in both fingerprints."
         )
         ridge_line = (
-            "**Ridge features:** The local ridge flow and orientation around matched points are "
+            "*Ridge features:* The local ridge flow and orientation around matched points are "
             "consistent, which supports that both impressions belong to the same finger."
         )
     else:
         pattern_line = (
-            f"**Global pattern (shape):** Query = `{pattern_q}`, Database = `{pattern_db}` → "
+            f"*Global pattern (shape):* Query = {pattern_q}, Database = {pattern_db} → "
             f"pattern-level difference or mismatch reduces the chance of being the same finger."
         )
         minutiae_line = (
-            "**Local features (minutiae-style points):** The number of good matches and/or the "
+            "*Local features (minutiae-style points):* The number of good matches and/or the "
             "relative match ratio is low, so distinctive ridge points do not align well."
         )
         ridge_line = (
-            "**Ridge features:** Differences in local ridge flow, spacing or orientation lead to "
+            "*Ridge features:* Differences in local ridge flow, spacing or orientation lead to "
             "a lower similarity score between these fingerprints."
         )
 
     return matched, pattern_line, minutiae_line, ridge_line
 
 
-
-
 def main():
     st.set_page_config(page_title="Fingerprint Matcher (Basic)", layout="wide")
 
-    st.title("🔍 Basic Fingerprint Matching System (Streamlit GUI)")
+    st.title(" Basic Fingerprint Matching System ")
     st.write("Mini Project Demo – ORB Feature Matching (Minutiae-style Approximation) + Minutiae-like Mode")
 
     # Theory section
-    with st.expander("📚 Fingerprint Features (Theory – For Report)"):
+    with st.expander(" Fingerprint Features (Theory – For Report)"):
         st.markdown(
             """
-### 1️⃣ Global Pattern (Level–1 Features)
+### 1 Global Pattern (Level–1 Features)
 High-level shape of the fingerprint:
 
-- **Arch** – ridges enter from one side, form a slight wave, and exit on the other side.  
-- **Loop** – ridges enter from one side, loop around, and exit from the same side.  
-- **Whorl** – circular or spiral patterns forming round shapes in the centre.
+- *Arch* – ridges enter from one side, form a slight wave, and exit on the other side.  
+- *Loop* – ridges enter from one side, loop around, and exit from the same side.  
+- *Whorl* – circular or spiral patterns forming round shapes in the centre.
 
-Global patterns are useful for **classification**, but not sufficient alone for identity.
+Global patterns are useful for *classification*, but not sufficient alone for identity.
 
 ---
 
-### 2️⃣ Minutiae Points (Level–2 Features)
+### 2 Minutiae Points (Level–2 Features)
 Local, unique features used in forensic identification:
 
-- **Ridge ending** – where a ridge line terminates.  
-- **Bifurcation** – where one ridge splits into two branches.
+- *Ridge ending* – where a ridge line terminates.  
+- *Bifurcation* – where one ridge splits into two branches.
 
 Each minutia can be represented using:
 
-- Position: **(x, y)**  
-- Direction / angle: **θ (theta)**  
+- Position: *(x, y)*  
+- Direction / angle: *θ (theta)*  
 
 Minutiae patterns are unique for each individual and remain stable over a lifetime
 (unless there is a deep injury).
 
 ---
 
-### 3️⃣ Ridge Features (Level–3 / Fine Features)
+### 3 Ridge Features (Level–3 / Fine Features)
 Fine level details such as:
 
-- **Ridge count** – number of ridges between two minutiae  
-- **Ridge spacing** – distance between neighbouring ridges  
-- **Orientation field** – local direction of ridge flow  
+- *Ridge count* – number of ridges between two minutiae  
+- *Ridge spacing* – distance between neighbouring ridges  
+- *Orientation field* – local direction of ridge flow  
 
 Advanced systems may also use pores, ridge shape and pressure marks.
 
 ---
 
-ℹ️ **Note for this project:**  
-- In **ORB mode**, we use ORB keypoints as approximated local features.  
-- In **Minutiae-like mode**, we detect corner points along fingerprint ridges using edge + corner
+ℹ *Note for this project:*  
+- In *ORB mode*, we use ORB keypoints as approximated local features.  
+- In *Minutiae-like mode*, we detect corner points along fingerprint ridges using edge + corner
   detection as a simplified approximation of minutiae (educational, not full forensic AFIS).
 """
         )
 
-    
-    st.sidebar.header("⚙️ Settings")
+    st.sidebar.header("⚙ Settings")
 
-    
     algo = st.sidebar.radio(
         "Matching method:",
         ("ORB (Feature-based)", "Minutiae-like (Simplified Forensic)")
@@ -375,7 +357,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
 
     st.sidebar.info("Make sure the `database/` folder contains fingerprint images.")
 
-    
     st.subheader("1 Upload Query Fingerprint")
     query_file = st.file_uploader(
         "Query fingerprint (PNG/JPG):",
@@ -386,7 +367,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
         st.warning("Please upload a query fingerprint image.")
         return
 
-    
     query_bytes = query_file.read()
     query_img = preprocess_image_bytes(query_bytes)
 
@@ -394,7 +374,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
         st.error("Failed to load the query image. Try another image.")
         return
 
-    
     if not is_probably_fingerprint(query_img):
         st.error(
             "This image does not look like a fingerprint.\n"
@@ -414,7 +393,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
 
     method_label = "ORB" if algo.startswith("ORB") else "Minutiae-like"
 
-    
     if mode == "Query vs Database Folder":
         st.subheader("2 Match with Database Folder")
 
@@ -438,7 +416,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
             if db_img is None:
                 continue
 
-            
             if algo.startswith("ORB"):
                 score, rel_score, vis = match_fingerprints(query_img, db_img)
             else:
@@ -458,7 +435,7 @@ Advanced systems may also use pores, ridge shape and pressure marks.
         if scores:
             scores_sorted = sorted(scores, key=lambda x: x[1], reverse=True)
             for fname, sc, rel in scores_sorted:
-                st.write(f"- **{fname}** → `{sc}` score, relative = `{rel:.2f}`")
+                st.write(f"- *{fname}* → `{sc}` score, relative = `{rel:.2f}`")
 
         st.write("---")
         if best_file is not None:
@@ -471,8 +448,8 @@ Advanced systems may also use pores, ridge shape and pressure marks.
             )
 
             st.success(
-                f"Best candidate: **{os.path.basename(best_file)}** "
-                f"(Score: {best_score}, Relative: {best_rel:.2f}, Method: {method_label})"
+                f"Best candidate: *{os.path.basename(best_file)}* "
+                f"(Score: {best_score}, Relative: `{best_rel:.2f}`, Method: {method_label})"
             )
             if matched:
                 st.markdown("###  Result: FINGERPRINT MATCHED")
@@ -492,7 +469,6 @@ Advanced systems may also use pores, ridge shape and pressure marks.
                     use_container_width=True
                 )
 
-    
     else:
         st.subheader("2 Upload Single Database Fingerprint")
         target_file = st.file_uploader(
@@ -521,14 +497,13 @@ Advanced systems may also use pores, ridge shape and pressure marks.
 
         pattern_db = estimate_pattern(db_img)
 
-        
         if algo.startswith("ORB"):
             score, rel_score, vis = match_fingerprints(query_img, db_img)
         else:
             score, rel_score, vis = match_fingerprints_minutiae(query_img, db_img)
 
         st.write("---")
-        st.write(f"### Score: `{score}` (relative = `{rel_score:.2f}`) — Method: **{method_label}**")
+        st.write(f"### Score: `{score}` (relative = `{rel_score:.2f}`) — Method: *{method_label}*")
 
         matched, pattern_line, minutiae_line, ridge_line = explain_match(
             score, rel_score, threshold_abs, threshold_rel,
@@ -536,11 +511,11 @@ Advanced systems may also use pores, ridge shape and pressure marks.
         )
 
         if matched:
-            st.success("✅ Result: FINGERPRINT MATCHED")
+            st.success(" Result: FINGERPRINT MATCHED")
         else:
-            st.error("❌ Result: FINGERPRINT NOT MATCHED")
+            st.error(" Result: FINGERPRINT NOT MATCHED")
 
-        st.markdown("#### 🔎 Result Explanation (Pattern / Minutiae / Ridge Features):")
+        st.markdown("####  Result Explanation (Pattern / Minutiae / Ridge Features):")
         st.markdown(pattern_line)
         st.markdown(minutiae_line)
         st.markdown(ridge_line)
